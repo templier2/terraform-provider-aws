@@ -60,10 +60,11 @@ This resource supports the following arguments:
 * `capabilities` - (Optional) A list of capabilities.
   Valid values: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, or `CAPABILITY_AUTO_EXPAND`
 * `disable_rollback` - (Optional) Set to true to disable rollback of the stack if stack creation failed.
-  Conflicts with `on_failure`.
+  Conflicts with `deployment_config` and `on_failure`.
+* `deployment_config` - (Optional) Configuration block for stack operations, including Express mode. See [Deployment Configuration](#deployment-configuration) below. Conflicts with `disable_rollback` and `on_failure`.
 * `notification_arns` - (Optional) A list of SNS topic ARNs to publish stack related events.
 * `on_failure` - (Optional) Action to be taken if stack creation fails. This must be
-  one of: `DO_NOTHING`, `ROLLBACK`, or `DELETE`. Conflicts with `disable_rollback`.
+  one of: `DO_NOTHING`, `ROLLBACK`, or `DELETE`. Conflicts with `deployment_config` and `disable_rollback`.
 * `parameters` - (Optional) A map of Parameter structures that specify input parameters for the stack.
 * `policy_body` - (Optional) Structure containing the stack policy body.
   Conflicts w/ `policy_url`.
@@ -72,6 +73,13 @@ This resource supports the following arguments:
 * `tags` - (Optional) Map of resource tags to associate with this stack. If configured with a provider [`default_tags` configuration block](https://registry.terraform.io/providers/hashicorp/aws/latest/docs#default_tags-configuration-block) present, tags with matching keys will overwrite those defined at the provider-level.
 * `iam_role_arn` - (Optional) The ARN of an IAM role that AWS CloudFormation assumes to create the stack. If you don't specify a value, AWS CloudFormation uses the role that was previously associated with the stack. If no role is available, AWS CloudFormation uses a temporary session that is generated from your user credentials.
 * `timeout_in_minutes` - (Optional) The amount of time that can pass before the stack status becomes `CREATE_FAILED`.
+
+### Deployment Configuration
+
+The `deployment_config` block supports the following arguments:
+
+* `mode` - (Required) Deployment mode for create, update, and delete operations. Valid values are `STANDARD` and `EXPRESS`. In `EXPRESS` mode, CloudFormation completes an operation after applying resource configuration without waiting for resources to become ready to serve traffic.
+* `disable_rollback` - (Optional) Whether to disable rollback when a stack operation fails. In `EXPRESS` mode, CloudFormation disables rollback by default.
 
 ## Attribute Reference
 

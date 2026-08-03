@@ -65,9 +65,30 @@ func resourceStack() *schema.Resource {
 					},
 				},
 				"disable_rollback": {
-					Type:     schema.TypeBool,
-					Optional: true,
-					ForceNew: true,
+					Type:          schema.TypeBool,
+					Optional:      true,
+					ForceNew:      true,
+					ConflictsWith: []string{"deployment_config", "on_failure"},
+				},
+				"deployment_config": {
+					Type:          schema.TypeList,
+					Optional:      true,
+					MaxItems:      1,
+					ConflictsWith: []string{"disable_rollback", "on_failure"},
+					Elem: &schema.Resource{
+						Schema: map[string]*schema.Schema{
+							"disable_rollback": {
+								Type:     schema.TypeBool,
+								Optional: true,
+								Computed: true,
+							},
+							names.AttrMode: {
+								Type:             schema.TypeString,
+								Required:         true,
+								ValidateDiagFunc: enum.Validate[awstypes.DeploymentConfigMode](),
+							},
+						},
+					},
 				},
 				names.AttrIAMRoleARN: {
 					Type:     schema.TypeString,
@@ -87,6 +108,7 @@ func resourceStack() *schema.Resource {
 					Type:             schema.TypeString,
 					Optional:         true,
 					ForceNew:         true,
+					ConflictsWith:    []string{"deployment_config", "disable_rollback"},
 					ValidateDiagFunc: enum.Validate[awstypes.OnFailure](),
 				},
 				"outputs": {
@@ -161,6 +183,9 @@ func resourceStackCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 	if v, ok := d.GetOk("disable_rollback"); ok {
 		input.DisableRollback = aws.Bool(v.(bool))
+	}
+	if v, ok := d.GetOk("deployment_config"); ok {
+		input.DeploymentConfig = expandDeploymentConfig(v.([]any))
 	}
 	if v, ok := d.GetOk(names.AttrIAMRoleARN); ok {
 		input.RoleARN = aws.String(v.(string))
@@ -260,6 +285,9 @@ func resourceStackRead(ctx context.Context, d *schema.ResourceData, meta any) di
 			d.Set("disable_rollback", false)
 		}
 	}
+	if err := d.Set("deployment_config", flattenDeploymentConfig(stack.DeploymentConfig)); err != nil {
+		return sdkdiag.AppendErrorf(diags, "setting deployment_config: %s", err)
+	}
 	d.Set(names.AttrIAMRoleARN, stack.RoleARN)
 	d.Set(names.AttrName, stack.StackName)
 	if len(stack.NotificationARNs) > 0 {
@@ -292,6 +320,9 @@ func resourceStackUpdate(ctx context.Context, d *schema.ResourceData, meta any) 
 	// Capabilities must be present whether they are changed or not
 	if v, ok := d.GetOk("capabilities"); ok {
 		input.Capabilities = flex.ExpandStringyValueSet[awstypes.Capability](v.(*schema.Set))
+	}
+	if v, ok := d.GetOk("deployment_config"); ok {
+		input.DeploymentConfig = expandDeploymentConfig(v.([]any))
 	}
 	if d.HasChange(names.AttrIAMRoleARN) {
 		input.RoleARN = aws.String(d.Get(names.AttrIAMRoleARN).(string))
@@ -358,6 +389,9 @@ func resourceStackDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 		ClientRequestToken: aws.String(requestToken),
 		StackName:          aws.String(d.Id()),
 	}
+	if v, ok := d.GetOk("deployment_config"); ok {
+		input.DeploymentConfig = expandDeploymentConfig(v.([]any))
+	}
 	_, err := conn.DeleteStack(ctx, &input)
 
 	if tfawserr.ErrCodeEquals(err, errCodeValidationError) {
@@ -373,6 +407,36 @@ func resourceStackDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 
 	return diags
+}
+
+func expandDeploymentConfig(tfList []any) *awstypes.DeploymentConfig {
+	if len(tfList) == 0 || tfList[0] == nil {
+		return nil
+	}
+
+	tfMap := tfList[0].(map[string]any)
+	apiObject := &awstypes.DeploymentConfig{
+		Mode: awstypes.DeploymentConfigMode(tfMap[names.AttrMode].(string)),
+	}
+
+	if v, ok := tfMap["disable_rollback"]; ok {
+		apiObject.DisableRollback = aws.Bool(v.(bool))
+	}
+
+	return apiObject
+}
+
+func flattenDeploymentConfig(apiObject *awstypes.DeploymentConfig) []any {
+	if apiObject == nil {
+		return nil
+	}
+
+	tfMap := map[string]any{
+		"disable_rollback": apiObject.DisableRollback,
+		names.AttrMode:     apiObject.Mode,
+	}
+
+	return []any{tfMap}
 }
 
 func findStackByName(ctx context.Context, conn *cloudformation.Client, name string) (*awstypes.Stack, error) {

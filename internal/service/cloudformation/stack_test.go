@@ -70,6 +70,57 @@ func TestAccCloudFormationStack_basic(t *testing.T) {
 	})
 }
 
+func TestAccCloudFormationStack_deploymentConfig(t *testing.T) {
+	ctx := acctest.Context(t)
+	var stack awstypes.Stack
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_cloudformation_stack.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.CloudFormationServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckStackDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStackConfig_deploymentConfig(rName, false, "first"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckStackExists(ctx, t, resourceName, &stack),
+					resource.TestCheckResourceAttr(resourceName, "deployment_config.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "deployment_config.0.disable_rollback", acctest.CtFalse),
+					resource.TestCheckResourceAttr(resourceName, "deployment_config.0.mode", string(awstypes.DeploymentConfigModeExpress)),
+					resource.TestCheckResourceAttr(resourceName, "outputs.Value", "first"),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config: testAccStackConfig_deploymentConfig(rName, true, "second"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckStackExists(ctx, t, resourceName, &stack),
+					resource.TestCheckResourceAttr(resourceName, "deployment_config.0.disable_rollback", acctest.CtTrue),
+					resource.TestCheckResourceAttr(resourceName, "deployment_config.0.mode", string(awstypes.DeploymentConfigModeExpress)),
+					resource.TestCheckResourceAttr(resourceName, "outputs.Value", "second"),
+				),
+			},
+			{
+				Config: testAccStackConfig_deploymentConfig(rName, true, "second"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionNoop),
+					},
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionNoop),
+					},
+				},
+			},
+		},
+	})
+}
+
 func TestAccCloudFormationStack_CreationFailure_doNothing(t *testing.T) {
 	ctx := acctest.Context(t)
 	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
@@ -662,6 +713,32 @@ resource "aws_cloudformation_stack" "test" {
 STACK
 }
 `, rName)
+}
+
+func testAccStackConfig_deploymentConfig(rName string, disableRollback bool, value string) string {
+	return fmt.Sprintf(`
+resource "aws_cloudformation_stack" "test" {
+  name = %[1]q
+
+  deployment_config {
+    disable_rollback = %[2]t
+    mode             = "EXPRESS"
+  }
+
+  template_body = jsonencode({
+    Resources = {
+      WaitConditionHandle = {
+        Type = "AWS::CloudFormation::WaitConditionHandle"
+      }
+    }
+    Outputs = {
+      Value = {
+        Value = %[3]q
+      }
+    }
+  })
+}
+`, rName, disableRollback, value)
 }
 
 func testAccStackConfig_creationFailure(rName, onFailure string) string {
