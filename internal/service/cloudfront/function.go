@@ -233,7 +233,7 @@ func resourceFunctionUpdate(ctx context.Context, d *schema.ResourceData, meta an
 		etag = aws.ToString(output.ETag)
 	}
 
-	if d.Get("publish").(bool) {
+	if d.Get("publish").(bool) && d.HasChanges("code", names.AttrComment, "key_value_store_associations", "publish", "runtime") {
 		input := &cloudfront.PublishFunctionInput{
 			IfMatch: aws.String(etag),
 			Name:    aws.String(d.Id()),
